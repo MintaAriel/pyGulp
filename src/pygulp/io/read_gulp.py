@@ -1,6 +1,7 @@
 import io
 import pandas as pd
 import numpy as np
+import os
 import re
 
 
@@ -46,9 +47,8 @@ def read_results(GULP_output):
                     volume = 0
     # print(internal_dev)
 
-
-
-    df_gradient = pd.read_csv(io.StringIO(internal_dev),
+    fixed_inter_dev = re.sub(r'(?<=\d)-(?=\d)', ' -', internal_dev)
+    df_gradient = pd.read_csv(io.StringIO(fixed_inter_dev),
                      sep='\s+',
                      skipfooter=1,
                      header=None,
@@ -82,4 +82,32 @@ def read_results(GULP_output):
 
     return result
 
+def consecutive_gulp_read(path_exper):
+    experiments = os.listdir(path_exper)
+    for experiment in experiments:
+        exp_path = os.path.join(path_exper, experiment)
+        gulps = os.listdir(exp_path)
+        for value in gulps:
+            if '.got' in value:
+                print(value[-5:-4])
+                gulp_got = os.path.join(exp_path, value)
+                print(gulp_got)
+                with open(gulp_got, 'r') as file:
+                    file_content = file.readlines()
+                    for index, line in enumerate(file_content):
+                        if "**** Too many failed attempts to optimise ****" in line:
+                            print('There was an error')
+                            f_energy = file_content[index+2]
+                            f_Gnorm = file_content[index+3]
+                        elif '**** Optimisation achieved ****' in line:
+                            print('It was a success')
+                            f_energy = file_content[index + 2]
+                            f_Gnorm = file_content[index + 3]
+                        elif '**** Maximum number of function calls has been reached ****' in line:
+                            print('max_num_funct')
+                            f_energy = file_content[index + 2]
+                            f_Gnorm = file_content[index + 3]
+                    print(f' for {value}',f_energy, f_Gnorm)
+
+        print(gulps)
 

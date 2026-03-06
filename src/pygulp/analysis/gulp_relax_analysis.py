@@ -89,6 +89,8 @@ class GULP_test_opt:
         if self.atoms_order == False:
             self.ase_crystal = self.reorder_crystal(self.ase_crystal)
 
+        self.gulp_lib = None
+
     def reorder_crystal(self, crystal):
         tags = np.array([i for i in range(self.n_mol)] * self.n_atom_per_mol)
         crystal.set_tags(tags)
@@ -137,8 +139,8 @@ class GULP_test_opt:
                 for bond in range(len(bonds_df)):
                     delta = n * n_atom_per_mol
                     connections += (
-                        f"connect {bonds_df['aid1'][bond] + delta} "
-                        f"{bonds_df['aid2'][bond] + delta}\n"
+                        f"connect {int(bonds_df['atom1'][bond] + delta)} "
+                        f"{int(bonds_df['atom2'][bond] + delta)}\n"
                     )
 
         else:
@@ -175,10 +177,14 @@ class GULP_test_opt:
                 return np.nan
 
         # Add 1 if value is negative
-        if result < 0:
-            result += 1
-        elif result > 1:
-            result -= 1
+        # if result < 0:
+        #     result += 1
+        # elif result > 1:
+        #     result -= 1
+        if result > 1:
+            result -= int(result)
+        elif result < 0:
+            result -= int(result)-1
 
         return result
 
@@ -251,12 +257,15 @@ class GULP_test_opt:
             n_atom_per_mol = int(len(self.ase_crystal) / self.n_mol)
 
             if len(crystal)  == len(self.ase_crystal) :
-                # crystal.set_tags([i for i in range(int(self.n_mol)) for _ in range(n_atom_per_mol)])
+
                 crystal.set_scaled_positions(positions)
+                if self.gulp_lib == 'lennard':
+                    crystal.set_tags([i for i in range(int(self.n_mol)) for _ in range(n_atom_per_mol)])
 
                 #I think i need to correct self.reorder_crystal, so I can use it here
-                tags = np.array([i for i in range(self.n_mol)] * self.n_atom_per_mol)
-                crystal.set_tags(tags)
+                elif self.gulp_lib == 'reaxff_general.lib':
+                    tags = np.array([i for i in range(self.n_mol)] * self.n_atom_per_mol)
+                    crystal.set_tags(tags)
 
                 traj_writer.write(crystal)
                 print(f'structure {step} saved')
