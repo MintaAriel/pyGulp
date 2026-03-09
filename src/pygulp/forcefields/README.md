@@ -10,5 +10,6 @@ This project makes use of GULP version 6.4 with its pGFNFF module (Periodic Gene
 - `results/` – output databases (ignored by git)
 
 ## Results
-![results](data/results.png)
+![results](../../../data/results.png)
+
 

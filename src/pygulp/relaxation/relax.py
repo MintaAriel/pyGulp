@@ -214,7 +214,8 @@ class Gulp_relaxation_noadd:
             os.makedirs(os.path.join(self.path, 'CalcFold'))
             print("Directory created!")
         except FileExistsError:
-            print("Directory already exists, moving on.")
+            # print("Directory already exists, moving on.")
+            ...
 
         if library != None:
             os.system(f"cp {os.path.join('/home/vito/Programs/gulp-6.4/Libraries', f'{self.library}')} {os.path.join(self.path, 'CalcFold')}")

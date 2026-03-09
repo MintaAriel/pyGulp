@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-from pGFNFF_opti.gnff_fine_tun import tune_gfnff
+from pygulp.gnff_fine_tun import tune_gfnff
 from pathlib import Path
 
 script_dir = Path(__file__).parent

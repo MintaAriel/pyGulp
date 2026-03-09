@@ -1,8 +1,9 @@
 import numpy as np
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.ase import AseAtomsAdaptor
-from pGFNFF_opti.relax import Gulp_relaxation_noadd
-from pGFNFF_opti.read_gulp import read_results
+
+from ..relaxation.relax import Gulp_relaxation_noadd
+from ..io.read_gulp import read_results
 import matplotlib.pyplot as plt
 from pymatgen.symmetry.groups import SpaceGroup
 import pandas as pd
@@ -214,204 +215,163 @@ def define_ASU(crystal):
 
     # view(asu)
 
-    return   asu, spacegroup, mol_in_asym
+    return   asu, spacegroup, int(mol_in_asym)
 
 
-def get_cif():
+def get_cif(atom):
 
     pmg_structure = AseAtomsAdaptor.get_structure(atom)
     analyzer = SpacegroupAnalyzer(pmg_structure, symprec=1e-3)
-
     refined_structure = analyzer.get_refined_structure()
     return refined_structure
 
-da = DataConnection('/home/vito/PythonProjects/ASEProject/EA/data/theophylline/database/theophylline.db')
-connection_dir = '/home/vito/PythonProjects/ASEProject/EA/data/theophylline/connections'
-atom = da.get_atoms(4)
 
 
-# atom.cell[1] *= 0.7
-# atom.cell[2] *= 0.9
+class gradient_descent():
+    def __init__(self, structure, work_dir, connections):
+        self.structure = structure
+        self.work_dir = work_dir
+        self.asu, self.spacegroup, self.n_mol_asu = define_ASU(self.structure)
+        self.struc_change = transformASU(self.asu, self.spacegroup)
+        self.struc_change.mol_per_ASU = int(self.n_mol_asu)
+        self.energies = []
+        self.best_structure = None
+        self.connections = connections
 
-asu, spacegroup, n_mol_asu = define_ASU(atom)
-print(asu.cell)
-# ASU.cell[0][0] -= 5
+    def run(self, steps, potential, traj=False):
+        #def gradient_descent(ASU, full_cell, potential, mol_per_ASU):
+        tags =self.structure.get_tags()
+        unique_tags = np.unique(tags)
+        n_mol_cell = len(unique_tags)
+        atoms_per_mol = int(len(tags)/n_mol_cell)
+        self.struc_change.mol_per_cell = n_mol_cell
 
-factor = 0.80
-asu.cell[2] *= 0.6
-# asu.cell[1] *= factor
-# asu.cell[2] *= factor
-# # asu.cell[1] *= 0.7
+        displac_grad = np.zeros((self.n_mol_asu, 3))
+        rotations = np.repeat(np.eye(3)[None, :, :], int(self.n_mol_asu), axis=0)
+        cell_change_0 = self.asu.cell
 
+        if traj:
+            trajectory = Trajectory(os.path.join(self.work_dir, f'{potential}_sim.trajectory'), 'w')
 
-# atom.cell[2][2] -= 3
+        cell_step = 0
+        increment = 0.05
+        for i in range(steps):
+            new_ASU = self.struc_change.transform(mol_displacement=displac_grad,
+                                             mol_rotational_matrix=rotations,
+                                             cell_vector=cell_change_0)
 
+            if traj:
+                #reconstruction of the full cell
+                full_new_ASU = self.struc_change.get_full_sym_cell(new_ASU)
+                full_new_ASU.set_pbc([True, True, True])
+                full_new_ASU.set_tags([i for i in range(n_mol_cell) for _ in range(atoms_per_mol)])
+                trajectory.write(full_new_ASU)
 
-print(asu, spacegroup,n_mol_asu)
-
-struc_change = transformASU(asu, spacegroup)
-struc_change.mol_per_ASU = int(n_mol_asu)
-work_dir  = '/home/vito/PythonProjects/ASEProject/EA/test/struc-gen/Sym'
-
-
-
-def gradient_descent(ASU, full_cell, potential, mol_per_ASU):
-    energies = []
-    tags =full_cell.get_tags()
-    unique_tags = np.unique(tags)
-    n_mol_cell = len(unique_tags)
-    atoms_per_mol = int(len(tags)/n_mol_cell)
-
-    struc_change.mol_per_ASU = mol_per_ASU
-    struc_change.mol_per_cell = n_mol_cell
-
-    displac_grad = np.zeros((mol_per_ASU, 3))
-    rotations = np.repeat(np.eye(3)[None, :, :], mol_per_ASU, axis=0)
-    cell_change_0 = ASU.cell
-
-    traj = Trajectory(os.path.join(work_dir, f'{potential}_sim.traj'), 'w')
-
-    cell_step = 0
-    increment = 0.05
-    for i in range(200):
-
-
-        new_ASU = struc_change.transform(mol_displacement=displac_grad,
-                                         mol_rotational_matrix=rotations,
-                                         cell_vector=cell_change_0)
+            positions = new_ASU.get_positions().reshape(self.n_mol_asu, atoms_per_mol, 3)
+            R0 = positions.mean(axis=1)
+            R0_expanded = R0[:, None, :]  # shape (n-mol, 1, 3)
 
 
-        #reconstruction of the full cell
-        full_new_ASU = struc_change.get_full_sym_cell(new_ASU)
-        full_new_ASU.set_pbc([True, True, True])
-        # print(len(new_ASU))
-        # print(len(full_new_ASU))
-        full_new_ASU.set_tags([i for i in range(n_mol_cell) for _ in range(atoms_per_mol)])
-        traj.write(full_new_ASU)
+            if potential == 'gulp':
+                # energy_ASU returns a dict with the strain matrix, gradient of energy per atom, and energy
+                try:
+                    calculator = self.struc_change.energy_ASU(ASU_to_calc= new_ASU, cal_dir=self.work_dir, bonds_dir= self.connections)
+                except Exception as e:
+                    print('The symmetry was broken')
+                    print(e)
+                    break
+                # R0 - geometric center
+                T = np.linalg.inv(new_ASU.cell).T
 
-        positions = new_ASU.get_positions().reshape(mol_per_ASU, atoms_per_mol, 3)
-        R0 = positions.mean(axis=1)
-        R0_expanded = R0[:, None, :]  # shape (n-mol, 1, 3)
+                # all forces is and array of len(asu) rows x 3 columns
+                # all_forces = -calculator['gradient']
+                grad_frac = calculator['gradient']  # from GULP table
+                A = new_ASU.cell.array  # 3x3
+                all_forces_cart = -(grad_frac @ np.linalg.inv(A))
 
-        best_structure = None
+                forces = all_forces_cart.reshape(self.n_mol_asu, atoms_per_mol, 3)
+                gradient_R0 = -np.sum(forces, axis=1)
+                # print("Total ASU force:", np.sum(all_forces_cart, axis=0))
 
+                r_rel = positions - R0_expanded  # shape (n-mol, 30, 3)
 
-        if potential == 'gulp':
-            # energy_ASU returns a dict with the strain matrix, gradient of energy per atom, and energy
-            try:
-                calculator = struc_change.energy_ASU(ASU_to_calc= new_ASU, cal_dir=work_dir, bonds_dir= connection_dir)
-            except Exception as e:
-                print('The symmetry was broken')
-                print(e)
-                break
-            # R0 - geometric center
-            T = np.linalg.inv(new_ASU.cell).T
-
-            # all forces is and array of len(asu) rows x 3 columns
-            # all_forces = -calculator['gradient']
-            grad_frac = calculator['gradient']  # from GULP table
-            A = new_ASU.cell.array  # 3x3
-            all_forces_cart = -(grad_frac @ np.linalg.inv(A))
-
-            forces = all_forces_cart.reshape(mol_per_ASU, atoms_per_mol, 3)
-            gradient_R0 = -np.sum(forces, axis=1)
-            # print("Total ASU force:", np.sum(all_forces_cart, axis=0))
-
-            r_rel = positions - R0_expanded  # shape (n-mol, 30, 3)
-
-            torque = np.sum(np.cross(r_rel, forces), axis=1)
+                torque = np.sum(np.cross(r_rel, forces), axis=1)
 
 
-            del calculator["gradient"]
-            calculator['gradient_r0'] = gradient_R0
-            calculator['torque'] = torque
-            strain = calculator["strain"]
-            eta_t = 80e-4
-            eta_r = 5e-6
-            eta_c = 500e-8
-            print(f'step:{i}    Energy:',calculator['energy'])
+                del calculator["gradient"]
+                calculator['gradient_r0'] = gradient_R0
+                calculator['torque'] = torque
+                strain = calculator["strain"]
+                eta_t = 80e-4
+                eta_r = 5e-6
+                eta_c = 500e-8
+                print(f'step:{i}    Energy:',calculator['energy'])
 
 
-            if i == 0:
-                best_energy = calculator['energy']
-                best_structure = full_new_ASU
+                if i == 0:
+                    best_energy = calculator['energy']
+                    self.best_structure = full_new_ASU
 
-            elif calculator['energy'] < min(energies):
-                best_energy = calculator['energy']
-                best_structure = full_new_ASU
-                write(os.path.join(work_dir, 'best_structure.cif'), best_structure)
-                print('This is the lowest so far', best_energy)
+                elif calculator['energy'] < min(self.energies):
+                    best_energy = calculator['energy']
+                    self.best_structure = full_new_ASU
+                    write(os.path.join(self.work_dir, 'best_structure.cif'),self. best_structure)
+                    print('This is the lowest so far', best_energy)
 
-            energies.append(calculator['energy'])
+                self.energies.append(calculator['energy'])
 
-        elif potential == 'uma':
-            calc = None
-            full_new_ASU.calc = calc
-            volume = full_new_ASU.get_volume()
-            gpa2ev = 0.006241509
-            full_new_ASU.get_forces()
+            elif potential == 'uma':
+                calc = None
+                full_new_ASU.calc = calc
+                volume = full_new_ASU.get_volume()
+                gpa2ev = 0.006241509
+                full_new_ASU.get_forces()
 
-            results = full_new_ASU.calc.results
-            eps = results['stress'] * gpa2ev * -volume
-            strain = np.array([
-                [eps[0], eps[5], eps[4]],
-                [eps[5], eps[1], eps[3]],
-                [eps[4], eps[3], eps[2]]
-            ])
+                results = full_new_ASU.calc.results
+                eps = results['stress'] * gpa2ev * -volume
+                strain = np.array([
+                    [eps[0], eps[5], eps[4]],
+                    [eps[5], eps[1], eps[3]],
+                    [eps[4], eps[3], eps[2]]
+                ])
 
-            forces = results['forces'][0:30, :]
-            gradient_R0 = -np.sum(forces, axis=0)
-            torque = np.sum(np.cross(positions - R0, forces), axis=0)
-            eta_t = 20e-4
-            eta_r = 5e-6
-            eta_c = 5e-3
-            print(f'step:{i}    Energy:', results['energy'])
+                forces = results['forces'][0:30, :]
+                gradient_R0 = -np.sum(forces, axis=0)
+                torque = np.sum(np.cross(positions - R0, forces), axis=0)
+                eta_t = 20e-4
+                eta_r = 5e-6
+                eta_c = 5e-3
+                print(f'step:{i}    Energy:', results['energy'])
 
-        # Parameters for gradient descent
+            # Parameters for gradient descent
 
-        # positions
-        displac_grad += -eta_t * gradient_R0
-
-
-        # rotation
-
-        for k in range(mol_per_ASU):
-            rotations[k] = exp_so3(eta_r * torque[k]) @ rotations[k]
+            # positions
+            displac_grad += -eta_t * gradient_R0
 
 
-        #cell
-        # H_new = (np.eye(3) + eta_c * strain ) @ cell_change_0
-        # cell_change_0 = H_new
-        cell_step +=1
-        if cell_step == 3:
+            # rotation
+            for k in range(self.n_mol_asu):
+                rotations[k] = exp_so3(eta_r * torque[k]) @ rotations[k]
 
-            cell_step = 0
-            # H_new = (np.eye(3) + eta_c * strain) @ cell_change_0
+            #cell
+            # H_new = (np.eye(3) + eta_c * strain ) @ cell_change_0
             # cell_change_0 = H_new
-            # print(strain)
-            # # struc_change.ASU.cell[0] = b *(1- increment)
-            # print(b *(1- increment))
-            # increment += 0.05
-        else:
-            pass
+            cell_step +=1
+            if cell_step == 3:
+                cell_step = 0
+                # H_new = (np.eye(3) + eta_c * strain) @ cell_change_0
+                # cell_change_0 = H_new
+                # print(strain)
+                # # struc_change.ASU.cell[0] = b *(1- increment)
+                # print(b *(1- increment))
+                # increment += 0.05
+            else:
+                pass
 
-    traj.close()
-    return energies
-
-
-
-#  da = DataConnection('/home/vito/Downloads/Mg4Al8O16_401.db')
-#da = DataConnection('/home/vito/PythonProjects/ASEProject/CARLO/theophylline/theophylline_8.db')
-
-
-
-energies = gradient_descent(asu, atom, 'gulp', int(n_mol_asu))
+        if traj:
+            trajectory.close()
 
 
-steps = [i for i in range(len(energies))]
-plt.plot(energies)
-plt.scatter(steps, energies)
-plt.ylabel('Energy, eV')
-plt.xlim(0,)
-plt.xlabel('cycle')
-plt.show()
+
+
+

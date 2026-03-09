@@ -6,6 +6,11 @@ __pycache__/
 *.db
 results/
 
+#metadata of the package
+build/
+dist/
+*.egg-info/
+
 # Experiment outputs (if they are generated and not input)
 tests/experiment/CalcFold/
 !tests/experiment/CalcFold/*.gin   # keep template input files if needed

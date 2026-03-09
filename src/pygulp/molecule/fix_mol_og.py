@@ -1,6 +1,6 @@
 import numpy as np
-from pGFNFF_opti.relax import Gulp_relaxation_noadd
-from pGFNFF_opti.read_gulp import read_results
+from ..relaxation.relax import Gulp_relaxation_noadd
+from ..io.read_gulp import read_results
 import matplotlib.pyplot as plt
 from pymatgen.symmetry.groups import SpaceGroup
 from ase.geometry import cell_to_cellpar, cellpar_to_cell
@@ -9,13 +9,6 @@ from ase import Atoms
 from ase.ga.data import DataConnection
 from ase.io.trajectory import Trajectory
 
-from ase.visualize import view
-from ase.io import write
-from pymatgen.core.structure import Structure
-from pymatgen.symmetry.analyzer import SpacegroupOperations
-from sympy.physics.vector import gradient
-import math
-from ase.optimize.optimize import Optimizer
 
 
 
