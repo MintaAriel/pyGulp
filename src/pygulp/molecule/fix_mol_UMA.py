@@ -12,6 +12,7 @@ from ase.ga.data import DataConnection
 
 
 
+
 predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device="cuda", cache_dir='/home/vito/Programs/UMA_models')
 calc = FAIRChemCalculator(predictor, task_name="omat")
 
@@ -21,7 +22,7 @@ calc = FAIRChemCalculator(predictor, task_name="omat")
 #
 # view(atoms)
 # atoms.calc = calc
-da = DataConnection('/home/vito/PythonProjects/ASEProject/CARLO/Carbamazepine/carbamazepine.db')
+da = DataConnection('/home/vito/uspex_matlab/theo_pyxtal/test_1/theophilline.db')
 atom_unrel = da.get_atoms(5)
 
 

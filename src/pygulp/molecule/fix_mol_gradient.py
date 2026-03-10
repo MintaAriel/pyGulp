@@ -1,7 +1,7 @@
 import numpy as np
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.ase import AseAtomsAdaptor
-
+from huggingface_hub import login
 from ..relaxation.relax import Gulp_relaxation_noadd
 from ..io.read_gulp import read_results
 import matplotlib.pyplot as plt
@@ -14,6 +14,8 @@ from ase.io import write
 import os
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from fairchem.core import pretrained_mlip, FAIRChemCalculator
+from abc import ABC, abstractmethod
 from pymatgen.io.cif import CifWriter
 
 
@@ -226,24 +228,34 @@ def get_cif(atom):
     return refined_structure
 
 
+class GradientDescentBase(ABC):
 
-class gradient_descent():
     def __init__(self, structure, work_dir, connections):
         self.structure = structure
         self.work_dir = work_dir
-        self.asu, self.spacegroup, self.n_mol_asu = define_ASU(self.structure)
-        self.struc_change = transformASU(self.asu, self.spacegroup)
-        self.struc_change.mol_per_ASU = int(self.n_mol_asu)
-        self.energies = []
-        self.best_structure = None
         self.connections = connections
 
-    def run(self, steps, potential, traj=False):
+        self.asu, self.spacegroup, self.n_mol_asu = define_ASU(self.structure)
+        self.struc_change = transformASU(self.asu, self.spacegroup)
+
+        self.struc_change.mol_per_ASU = int(self.n_mol_asu)
+
+        self.energies = []
+        self.best_structure = None
+
+    @abstractmethod
+    def compute_energy_forces(self, new_ASU, full_new_ASU):
+        """Return energy, forces, torque, strain"""
+        pass
+
+    def run(self, steps, traj=False):
         #def gradient_descent(ASU, full_cell, potential, mol_per_ASU):
         tags =self.structure.get_tags()
         unique_tags = np.unique(tags)
         n_mol_cell = len(unique_tags)
         atoms_per_mol = int(len(tags)/n_mol_cell)
+        atoms_in_asu = self.n_mol_asu * atoms_per_mol
+
         self.struc_change.mol_per_cell = n_mol_cell
 
         displac_grad = np.zeros((self.n_mol_asu, 3))
@@ -251,7 +263,7 @@ class gradient_descent():
         cell_change_0 = self.asu.cell
 
         if traj:
-            trajectory = Trajectory(os.path.join(self.work_dir, f'{potential}_sim.trajectory'), 'w')
+            trajectory = Trajectory(os.path.join(self.work_dir, f'gulp_sim.trajectory'), 'w')
 
         cell_step = 0
         increment = 0.05
@@ -272,90 +284,54 @@ class gradient_descent():
             R0_expanded = R0[:, None, :]  # shape (n-mol, 1, 3)
 
 
-            if potential == 'gulp':
-                # energy_ASU returns a dict with the strain matrix, gradient of energy per atom, and energy
-                try:
-                    calculator = self.struc_change.energy_ASU(ASU_to_calc= new_ASU, cal_dir=self.work_dir, bonds_dir= self.connections)
-                except Exception as e:
-                    print('The symmetry was broken')
-                    print(e)
-                    break
-                # R0 - geometric center
-                T = np.linalg.inv(new_ASU.cell).T
 
-                # all forces is and array of len(asu) rows x 3 columns
-                # all_forces = -calculator['gradient']
-                grad_frac = calculator['gradient']  # from GULP table
+
+            if self.name == 'gulp':
+                results = self.compute_energy_forces(new_ASU)
+                # grad_frac is and array of len(asu) rows x 3 columns
+                # from GULP table (the gradient is in a/ev so we assume it is fractional derivatives)
+                grad_frac = results['gradient']
                 A = new_ASU.cell.array  # 3x3
                 all_forces_cart = -(grad_frac @ np.linalg.inv(A))
 
-                forces = all_forces_cart.reshape(self.n_mol_asu, atoms_per_mol, 3)
-                gradient_R0 = -np.sum(forces, axis=1)
-                # print("Total ASU force:", np.sum(all_forces_cart, axis=0))
-
-                r_rel = positions - R0_expanded  # shape (n-mol, 30, 3)
-
-                torque = np.sum(np.cross(r_rel, forces), axis=1)
+            elif self.name == 'uma':
+                # result['forces'] is and array of len(full_new_asu) rows x 3 columns
+                results = self.compute_energy_forces(full_new_ASU)
+                all_forces_cart = results['forces'][:atoms_in_asu]
 
 
-                del calculator["gradient"]
-                calculator['gradient_r0'] = gradient_R0
-                calculator['torque'] = torque
-                strain = calculator["strain"]
-                eta_t = 80e-4
-                eta_r = 5e-6
-                eta_c = 500e-8
-                print(f'step:{i}    Energy:',calculator['energy'])
+            forces = all_forces_cart.reshape(self.n_mol_asu, atoms_per_mol, 3)
+            gradient_R0 = -np.sum(forces, axis=1)
+            r_rel = positions - R0_expanded  # shape (n-mol, 30, 3)
+            torque = np.sum(np.cross(r_rel, forces), axis=1)
+            # strain = results["strain"]
 
 
-                if i == 0:
-                    best_energy = calculator['energy']
-                    self.best_structure = full_new_ASU
+            print(f'step:{i}    Energy:',results['energy'])
 
-                elif calculator['energy'] < min(self.energies):
-                    best_energy = calculator['energy']
-                    self.best_structure = full_new_ASU
-                    write(os.path.join(self.work_dir, 'best_structure.cif'),self. best_structure)
-                    print('This is the lowest so far', best_energy)
+            if i == 0:
+                best_energy = results['energy']
+                self.best_structure = full_new_ASU
 
-                self.energies.append(calculator['energy'])
+            elif results['energy'] < min(self.energies):
+                best_energy = results['energy']
+                self.best_structure = full_new_ASU
+                write(os.path.join(self.work_dir, 'best_structure.cif'),self. best_structure)
+                print('This is the lowest so far', best_energy)
 
-            elif potential == 'uma':
-                calc = None
-                full_new_ASU.calc = calc
-                volume = full_new_ASU.get_volume()
-                gpa2ev = 0.006241509
-                full_new_ASU.get_forces()
-
-                results = full_new_ASU.calc.results
-                eps = results['stress'] * gpa2ev * -volume
-                strain = np.array([
-                    [eps[0], eps[5], eps[4]],
-                    [eps[5], eps[1], eps[3]],
-                    [eps[4], eps[3], eps[2]]
-                ])
-
-                forces = results['forces'][0:30, :]
-                gradient_R0 = -np.sum(forces, axis=0)
-                torque = np.sum(np.cross(positions - R0, forces), axis=0)
-                eta_t = 20e-4
-                eta_r = 5e-6
-                eta_c = 5e-3
-                print(f'step:{i}    Energy:', results['energy'])
-
-            # Parameters for gradient descent
+            self.energies.append(results['energy'])
 
             # positions
-            displac_grad += -eta_t * gradient_R0
-
+            displac_grad += -self.eta_t * gradient_R0
 
             # rotation
             for k in range(self.n_mol_asu):
-                rotations[k] = exp_so3(eta_r * torque[k]) @ rotations[k]
+                rotations[k] = exp_so3(self.eta_r * torque[k]) @ rotations[k]
 
             #cell
             # H_new = (np.eye(3) + eta_c * strain ) @ cell_change_0
             # cell_change_0 = H_new
+
             cell_step +=1
             if cell_step == 3:
                 cell_step = 0
@@ -371,6 +347,62 @@ class gradient_descent():
         if traj:
             trajectory.close()
 
+
+class GradientDescentGULP(GradientDescentBase):
+
+    def __init__(self, structure, work_dir, connections):
+        super().__init__(structure, work_dir, connections)
+        self.name = 'gulp'
+        self.eta_t = 80e-4
+        self.eta_r = 5e-6
+        self.eta_c = 500e-8
+
+
+    def compute_energy_forces(self, new_ASU):
+
+        try:
+            calculator = self.struc_change.energy_ASU(
+                ASU_to_calc=new_ASU,
+                cal_dir=self.work_dir,
+                bonds_dir=self.connections
+            )
+        except Exception as e:
+            print('The symmetry was broken')
+            print(e)
+
+        return calculator
+
+
+
+class GradientDescentUMA(GradientDescentBase):
+
+    def __init__(self, structure, work_dir, connections, login_key, device='cpu' ):
+        super().__init__(structure, work_dir, connections)
+        self.device = device
+        self.login = login_key
+        self.name = 'uma'
+        self.eta_t = 20e-4
+        self.eta_r = 5e-6
+        self.eta_c = 5e-3
+
+    def compute_energy_forces(self, full_new_ASU):
+        login(self.login)
+        #Using UMA dmall model for molecular crystals
+        predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device=self.device)
+        calc = FAIRChemCalculator(predictor, task_name="omat")
+        full_new_ASU.calc = calc
+        volume = full_new_ASU.get_volume()
+        gpa2ev = 0.006241509
+        #It seems that UMA returns the forces in cartesian coordinates
+        full_new_ASU.get_forces()
+        results = full_new_ASU.calc.results
+        eps = results['stress'] * gpa2ev * -volume
+        results['strain'] = np.array([
+            [eps[0], eps[5], eps[4]],
+            [eps[5], eps[1], eps[3]],
+            [eps[4], eps[3], eps[2]]
+        ])
+        return results
 
 
 
