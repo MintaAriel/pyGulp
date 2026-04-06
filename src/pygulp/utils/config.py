@@ -15,9 +15,10 @@ def find_project_root():
 def load_config(config_path=None):
     """Load configuration from base.yml and resolve paths."""
     root = find_project_root()
+    config_name = os.environ.get("EA_CONFIG", "base")
 
     if config_path is None:
-        config_path = root / "configs" / "base.yml"
+        config_path = root / "configs" / f"{config_name}.yml"
     else:
         config_path = Path(config_path)
 

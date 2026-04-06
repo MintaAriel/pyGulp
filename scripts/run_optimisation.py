@@ -8,14 +8,20 @@ def main():
     ap.add_argument("--delta", type=float, default=0.1, help="delta for parameters from the og gfnff")
     ap.add_argument("--name", type=str, default="tunning", help="db_name")
     ap.add_argument("--trials", type=int, default=100, help="number of trials for Bayesian opt")
-    ap.add_argument("--descriptor", type=str, default="soap", help="ddescriptor for molecular crystal")
+    ap.add_argument("--descriptor", type=str, default="soap", help="descriptor for molecular crystal")
+    ap.add_argument("--experimental_cif", type=str, default="./data", help="directory of experimental.cif")
+    ap.add_argument("--out_dir", type=str, default="./results", help="out directory")
 
     args = ap.parse_args()
 
     tune_gfnff(delta_par=args.delta,
                db_name=args.name,
                n_trials=args.trials,
-               fingerprint=args.descriptor)
+               fingerprint=args.descriptor,
+               experimental_cif=args.experimental_cif,
+               out_dir=args.out_dir)
 
 if __name__ == "__main__":
     main()
+
+

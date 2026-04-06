@@ -83,7 +83,10 @@ def get_parameters( gfnff_param, molcrys, calc_dir):
 
 
 
-def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir=None, low_boundry=None, high_boundry=None):
+def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir=None, low_boundry=None, high_boundry=None,
+               initial_parameters: list = [0.80, 1.343, 0.727, 1.0, 1.41455 ],
+               experimental_cif: Path = None,
+               out_dir:Path = None):
     '''
 
     :param delta_par: the +- limit of the parameters for the optimisation
@@ -92,22 +95,41 @@ def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir=None, low_
     :param fingerprint: rmsd or soap descriptor
     :param low_boundry:
     :param high_boundry:
+    :initial_parameters: # mcGFN-FF gfnff_scale s_coulomb s_rep s_hb s_c6 s_c8 (optimized for molecular crystals
+    in Grimme, Stefan and Rose, Thomas. "mcGFN-FF: an accurate force field for optimization and energetic
+    screening of molecular crystals" Zeitschrift für Naturforschung B, vol. 79, no. 4, 2024, pp.
+    191-200. https://doi.org/10.1515/znb-2023-0088)
     :return:
     '''
     cfg = load_config()
-    data_dir = Path(cfg["paths"]["data_dir"])
-    test_dir = Path(cfg["paths"]["test_dir"])
-    results_dir = Path(cfg["paths"]["results_dir"])
 
-    experimental = read(data_dir / 'experimental.cif')
-    gfnff_scale = np.array([0.546335, 1.823183, 0.368031, 0.100, 2.440330])
-    gfnff_my = np.array([0.70, 1.343, 0.727, 1.0, 1.41455])
+    if not experimental_cif:
+        data_dir = Path(cfg["paths"]["data_dir"])
+        experimental = read(data_dir / 'experimental.cif')
+    else:
+        experimental_cif = Path(experimental_cif)
+        # Check if it's a directory or a file
+        if experimental_cif.is_dir():
+            experimental = read(experimental_cif / 'experimental.cif')
+        else:
+            experimental = read(experimental_cif)
+
+    if not out_dir:
+        test_dir = Path(cfg["paths"]["test_dir"])
+        results_dir = Path(cfg["paths"]["results_dir"])
+    else:
+        test_dir = Path(out_dir) /'test_dir'
+        results_dir = Path(out_dir)
+
+
+    # gfnff_scale = np.array([0.546335, 1.823183, 0.368031, 0.100, 2.440330])
+    # gfnff_my = np.array([0.70, 1.343, 0.727, 1.0, 1.41455])
 
     analyzer = crystal_descriptor(experimental)
     initial_vol = experimental.get_volume()
     print(initial_vol)
 
-    ini_par = np.array([ 0.80, 1.343, 0.727, 1.0, 1.41455 ])
+    ini_par = np.array(initial_parameters)
     # mcGFN-FF gfnff_scale s_coulomb s_rep s_hb s_c6 s_c8
 
     if low_boundry and high_boundry:
@@ -156,9 +178,18 @@ def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir=None, low_
             print('bad parameters')
         return score
 
-    db_path = results_dir / f"{db_name}.db"
+
     study_name = db_name
-    storage_name = f"sqlite:///{db_path}"
+    db_path = Path(results_dir) / f"{db_name}.db"
+
+    # Ensure the directory exists first! SQLite can't create files in non-existent folders.
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Use 4 slashes for absolute paths: sqlite:////
+    storage_name = f"sqlite:////{db_path.resolve()}"
+
+    print(f"Connecting to: {storage_name}")
+
 
     # optuna.delete_study(
     #     study_name=study_name,
