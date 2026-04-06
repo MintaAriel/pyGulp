@@ -1,0 +1,15 @@
+project:
+  name: ASEProject
+
+paths:
+  data_dir: ./data
+  test_dir: ./tests
+  models_dir: ./models
+  results_dir: ./results
+
+executables:
+  gulp_dir: ~/Programs/gulp-6.4/Src/gulp
+  gulp_lib: ~/Programs/gulp-6.4/Libraries
+
+env:
+  conda_env: ase_env

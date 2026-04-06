@@ -191,10 +191,10 @@ def exp_so3(w):
     )
 
 
-def define_ASU(crystal):
+def define_ASU(crystal, tolerance = 0.01):
     pmg_structure = AseAtomsAdaptor.get_structure(crystal)
     # Assuming you have a pymatgen Structure object
-    analyzer = SpacegroupAnalyzer(pmg_structure)
+    analyzer = SpacegroupAnalyzer(pmg_structure, symprec=tolerance)
     similar_atoms = analyzer.get_symmetry_dataset().equivalent_atoms
 
 

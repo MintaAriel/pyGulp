@@ -10,9 +10,9 @@ import re
 import json
 import numpy as np
 from matplotlib.style.core import library
+from pygulp.utils.config import load_config, setup_gulp_env
 
-os.environ["ASE_GULP_COMMAND"]= os.path.expanduser("~/Programs/gulp-6.4/Src/gulp  < PREFIX.gin > PREFIX.got")
-os.environ["GULP_LIB"]= os.path.expanduser("/home/vito/Programs/gulp-6.4/Libraries")
+setup_gulp_env()
 #We have to create a customize Gulp class singe we need to define a pressure and
 #gulp return 'Total lattice enthalphy' instead of 'Total lattice energy' which GULP class cannot parse
 
@@ -99,7 +99,8 @@ class Gulp_relaxation:
         self.da = DataConnection(self.db_dir)
         with open(os.path.join(self.path,'labels.json'), 'r') as f:
             self.molecule_labels = json.load(f)
-        os.environ["GULP_LIB"] = os.path.expanduser("~/Programs/gulp-6.4/Src/gulp  < PREFIX.gin > PREFIX.got")
+        cfg = load_config()
+        self.gulp_lib_dir = cfg["executables"]["gulp_lib"]
         try:
             os.mkdir(os.path.join(self.path, 'CalcFold'))
             print("Directory created!")
@@ -203,7 +204,9 @@ class Gulp_relaxation_noadd:
         self.library = library
         self.gulp_keywords = gulp_keywords
         self.gulp_options = gulp_options
-        os.environ["ASE_GULP_COMMAND"]= os.path.expanduser("~/Programs/gulp-6.4/Src/gulp  < PREFIX.gin > PREFIX.got")
+        cfg = load_config()
+        self.gulp_lib_dir = cfg["executables"]["gulp_lib"]
+        setup_gulp_env(cfg)
         try:
             with open(os.path.join(self.path,'labels.json'), 'r') as f:
                 self.molecule_labels = json.load(f)
@@ -218,7 +221,7 @@ class Gulp_relaxation_noadd:
             ...
 
         if library != None:
-            os.system(f"cp {os.path.join('/home/vito/Programs/gulp-6.4/Libraries', f'{self.library}')} {os.path.join(self.path, 'CalcFold')}")
+            os.system(f"cp {os.path.join(self.gulp_lib_dir, f'{self.library}')} {os.path.join(self.path, 'CalcFold')}")
 
     def get_symetry(self, atom):
         sg = spglib.get_spacegroup((atom.get_cell(), atom.get_scaled_positions(),

@@ -1,9 +1,11 @@
+from pathlib import Path
 from ase.io import read
 from dscribe.descriptors import SOAP
 import optuna
-from .relax import Gulp_relaxation_noadd
+from pygulp.relaxation.relax import Gulp_relaxation_noadd
 import numpy as np
-from .read_gulp import read_results
+from pygulp.io.read_gulp import read_results
+from pygulp.utils.config import load_config
 
 
 class crystal_descriptor():
@@ -81,7 +83,7 @@ def get_parameters( gfnff_param, molcrys, calc_dir):
 
 
 
-def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir, low_boundry=None, high_boundry=None):
+def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir=None, low_boundry=None, high_boundry=None):
     '''
 
     :param delta_par: the +- limit of the parameters for the optimisation
@@ -92,7 +94,12 @@ def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir, low_bound
     :param high_boundry:
     :return:
     '''
-    experimental = read(project_dir / 'data/experimental.cif')
+    cfg = load_config()
+    data_dir = Path(cfg["paths"]["data_dir"])
+    test_dir = Path(cfg["paths"]["test_dir"])
+    results_dir = Path(cfg["paths"]["results_dir"])
+
+    experimental = read(data_dir / 'experimental.cif')
     gfnff_scale = np.array([0.546335, 1.823183, 0.368031, 0.100, 2.440330])
     gfnff_my = np.array([0.70, 1.343, 0.727, 1.0, 1.41455])
 
@@ -119,7 +126,7 @@ def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir, low_bound
             trial.suggest_float("p5", low_boundry[4], high_boundry[4]),
         ])
 
-        calc_dir = project_dir / 'tests/opt_calcs'
+        calc_dir = test_dir / 'opt_calcs'
 
         try:
             new_crys, crys_param = get_parameters(theta, experimental, calc_dir)
@@ -149,7 +156,7 @@ def tune_gfnff(delta_par, db_name, n_trials, fingerprint, project_dir, low_bound
             print('bad parameters')
         return score
 
-    db_path = project_dir / 'results' / f"{db_name}.db"
+    db_path = results_dir / f"{db_name}.db"
     study_name = db_name
     storage_name = f"sqlite:///{db_path}"
 

@@ -13,6 +13,7 @@ dependencies = [
     "dscribe",
     "optuna",
     "spglib",
+    "pyyaml",
 ]
 
 [tool.setuptools.packages.find]

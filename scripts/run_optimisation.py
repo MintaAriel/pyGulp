@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 from pygulp.forcefields.gnff_fine_tun import tune_gfnff
-from pathlib import Path
-
-script_dir = Path(__file__).parent
-project_root = script_dir.parent
 
 
 def main():
@@ -19,8 +15,7 @@ def main():
     tune_gfnff(delta_par=args.delta,
                db_name=args.name,
                n_trials=args.trials,
-               fingerprint= args.descriptor,
-               project_dir= project_root )
+               fingerprint=args.descriptor)
 
 if __name__ == "__main__":
     main()
