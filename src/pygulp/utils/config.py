@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 import yaml
 
@@ -44,5 +45,9 @@ def setup_gulp_env(cfg=None):
     gulp_exe = cfg["executables"]["gulp_dir"]
     gulp_lib = cfg["executables"]["gulp_lib"]
 
-    os.environ["ASE_GULP_COMMAND"] = f"{gulp_exe} < PREFIX.gin > PREFIX.got"
+    # Let gulp find libgfortran from the active conda env (missing in the code-server container)
+    lib_path = os.path.join(sys.prefix, "lib")
+    os.environ["ASE_GULP_COMMAND"] = (
+        f"LD_LIBRARY_PATH={lib_path}:$LD_LIBRARY_PATH {gulp_exe} < PREFIX.gin > PREFIX.got"
+    )
     os.environ["GULP_LIB"] = gulp_lib

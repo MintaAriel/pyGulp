@@ -20,6 +20,10 @@ setup_gulp_env()
 
 class MyGULP(GULP):
 
+    def _get_name(self):
+        # ASE derives the ASE_<NAME>_COMMAND env var from the class name;
+        # keep 'gulp' so the ASE_GULP_COMMAND set by setup_gulp_env is used
+        return 'gulp'
 
 
     def read_results(self):
