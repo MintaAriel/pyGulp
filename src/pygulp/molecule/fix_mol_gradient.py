@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib.style.core import library
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.ase import AseAtomsAdaptor
-from huggingface_hub import login
+#from huggingface_hub import login
 from ..relaxation.relax import Gulp_relaxation_noadd
 from ..io.read_gulp import read_results
 import matplotlib.pyplot as plt
@@ -15,7 +15,7 @@ from ase.io import write
 import os
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
+#from fairchem.core import pretrained_mlip, FAIRChemCalculator
 from abc import ABC, abstractmethod
 from pymatgen.io.cif import CifWriter
 

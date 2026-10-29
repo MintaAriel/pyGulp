@@ -8,8 +8,8 @@ paths:
   results_dir: ./results
 
 executables:
-  gulp_dir: ~/Programs/gulp-6.4/Src/gulp
-  gulp_lib: ~/Programs/gulp-6.4/Libraries
+  gulp_dir: /home/sirena/miniconda3/envs/uspex_matlab/bin/gulp
+  gulp_lib: /home/sirena/Brian/gulp-6.4/Libraries
 
 env:
-  conda_env: ase_env
+  conda_env: brian_ase_env
