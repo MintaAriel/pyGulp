@@ -1,0 +1,9 @@
+project:
+  name: ASEProject
+
+executables:
+  gulp_dir: /home/sirena/Brian/gulp-6.4/Src/gulp
+  gulp_lib: /home/sirena/Brian/gulp-6.4/Libraries
+
+env:
+  conda_env: brian_ase_env
